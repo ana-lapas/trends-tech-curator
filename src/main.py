@@ -57,6 +57,15 @@ def format_email_report(df_trends, topics, gh_data, rd_data):
     text += "\n\nRelatório gerado automaticamente pelo seu Tech Trends Curator. Mande sugestões e tire dúvidas a partir de https://www.linkedin.com/in/ana-paula-leao/"
     return text
 
+def get_historical_stats(title):
+    conn = sqlite3.connect('curator_data.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT AVG(views) FROM trend_logs WHERE title=?', (title,))
+    result = cursor.fetchone()
+    avg_views = result[0] if result and result[0] is not None else 0
+    conn.close()
+    return avg_views
+
 def get_growth_status(title, current_views):
     avg_views = get_historical_stats(title)
     if avg_views == 0:
@@ -69,7 +78,30 @@ def get_growth_status(title, current_views):
         return "📉 Cooling Down"
     return "📈 Steady"
 
+def check_system_health():
+    """Verifies internet and API reachability before running the pipeline."""
+    print("🔍 Running system health check...")
+    try:
+        # Check internet connection
+        requests.get("https://www.google.com", timeout=5)
+
+        # Add specific check for your key APIs (e.g., GitHub)
+        response = requests.get("https://api.github.com", timeout=5)
+        if response.status_code != 200:
+            print("❌ Warning: GitHub API might be unreachable.")
+            return False
+
+        print("✅ System healthy. Proceeding...")
+        return True
+    except Exception as e:
+        print(f"❌ System Health Check Failed: {e}")
+        return False
+
 def execute_pipeline():
+    if not check_system_health():
+        print("Pipeline aborted due to health check failure.")
+        return
+
     init_db()
     print("Starting data ingestion...")
 

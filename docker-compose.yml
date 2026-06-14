@@ -1,10 +1,11 @@
 version: '3.8'
-
 services:
-  curator-app:
+  curator:
     build: .
-    container_name: tech_trends_curator
+    volumes:
+      # This maps the database file from the container to your local folder
+      - ./curator_data.db:/app/curator_data.db
     env_file:
       - .env
-    volumes:
-      - ./data:/app/data
+    # Optional: Run as a cron job if you want it to run periodically
+    restart: on-failure
