@@ -1,53 +1,83 @@
+import sqlite3
+from datetime import datetime, timedelta
 from src.youtube_api import fetch_recent_whitelist_videos
+from src.github_api import fetch_trending_github_repos
+from src.reddit_api import fetch_trending_reddit_posts
 from src.nlp_processor import process_trends
 from src.email_notifier import send_email_report
 
-def format_email_report(df_trends, topics):
-    """Transforms the DataFrames into a friendly text payload for the email."""
+def init_db():
+    conn = sqlite3.connect('curator_data.db')
+    cursor = conn.cursor()
+    # Using 'trend_logs' to store title, source, metrics, and timestamp
+    cursor.execute('''CREATE TABLE IF NOT EXISTS trend_logs
+                      (title TEXT, source TEXT, views INTEGER, likes INTEGER, sent_at TEXT)''')
+    conn.commit()
+    conn.close()
 
+def is_already_sent(title):
+    conn = sqlite3.connect('curator_data.db')
+    cursor = conn.cursor()
+    seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    # Querying the same table we log into: 'trend_logs'
+    cursor.execute('SELECT 1 FROM trend_logs WHERE title=? AND sent_at > ?', (title, seven_days_ago))
+    exists = cursor.fetchone()
+    conn.close()
+    return exists is not None
+
+def log_sent_item(item):
+    conn = sqlite3.connect('curator_data.db')
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO trend_logs (title, source, views, likes, sent_at)
+                      VALUES (?, ?, ?, ?, ?)''',
+                   (item.get('title'), item.get('type', 'unknown'),
+                    item.get('views', 0), item.get('likes', 0),
+                    datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+def format_email_report(df_trends, topics, gh_data, rd_data):
     text = "Olá, Liderança da Developer Girls! 💜\n"
-    text += "Aqui estão os gatilhos de conteúdo mapeados nesta semana:\n\n"
+    text += "Aqui está o radar técnico desta semana.\n\n"
 
-    text += "🔥 TERMOS MAIS QUENTES (Keywords):\n"
+    text += "🔥 PALAVRAS-CHAVE EM ALTA:\n"
     for theme, freq in topics:
-        text += f" - {theme.upper()} (apareceu em {freq} vídeos de alto engajamento)\n"
+        text += f" - {theme.upper()} (Mencionada em {freq} fontes)\n"
 
-    text += "\n🎬 TOP 3 VÍDEOS (Maior Momentum / Velocidade de Engajamento):\n"
-    top_3 = df_trends.head(3)
-
-    for _, row in top_3.iterrows():
-        text += f"\n📌 Título: {row['title']}\n"
-        text += f"👩‍💻 Canal: {row['channel']}\n"
-        text += f"⚡ Score de Momentum: {row['momentum_score']:.1f}\n"
-        text += f"📊 Views: {row['views']} | Likes: {row['likes']}\n"
+    text += "\n🎬 TOP 3 ITENS DE ALTO MOMENTUM:\n"
+    for _, row in df_trends.head(3).iterrows():
+        item_type = row.get('type', 'youtube')
+        link = row.get('url', 'N/A') if item_type != 'youtube' else f"https://youtu.be/{row.get('video_id', '')}"
+        text += f"\n📌 Assunto: {row['title']}\n"
+        text += f"👩‍💻 Fonte: {row['channel']} | 🔗 Acessar: {link}\n"
         text += "-" * 40
 
-    text += "\n\nRelatório gerado automaticamente pelo seu Curador de Dados."
+    text += "\n\nRelatório gerado automaticamente pelo seu Tech Trends Curator. Mande sugestões e tire dúvidas a partir de https://www.linkedin.com/in/ana-paula-leao/"
     return text
 
 def execute_pipeline():
-    # System logs in English for developers/DevOps
-    print("Starting Whitelist scan...")
-    raw_data = fetch_recent_whitelist_videos()
-    
-    if not raw_data:
-        print("No new videos found in the mapped channels.")
+    init_db()
+    print("Starting data ingestion...")
+
+    # 1. Collect
+    raw_data = fetch_recent_whitelist_videos() + fetch_trending_github_repos() + fetch_trending_reddit_posts()
+
+    # 2. Filter using Database
+    curated_data = [item for item in raw_data if item.get('title') and not is_already_sent(item['title'])]
+
+    if not curated_data:
+        print("No new unique items found.")
         return
         
-    print(f"Extracted {len(raw_data)} videos. Analyzing Momentum and Topics...")
-    df_trends, topics = process_trends(raw_data)
-    
-    # Format the data into an email body
-    print("Formatting email payload...")
-    email_body = format_email_report(df_trends, topics)
-
-    # Print to terminal for debugging
-    print(email_body)
-
-    # Trigger the email module
-    print("Sending email to leadership...")
+    # 3. Process & Report
+    df_trends, topics = process_trends(curated_data)
+    email_body = format_email_report(df_trends, topics, fetch_trending_github_repos(), fetch_trending_reddit_posts())
     send_email_report(email_body)
 
-# Python's standard entry point
+    # 4. Log to DB
+    for item in curated_data:
+        log_sent_item(item)
+    print("Items successfully logged to database.")
+
 if __name__ == "__main__":
     execute_pipeline()
