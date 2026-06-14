@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  curator-app:
+    build: .
+    container_name: tech_trends_curator
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
