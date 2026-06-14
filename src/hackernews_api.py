@@ -1,6 +1,6 @@
 import requests
 
-def fetch_trending_reddit_posts():
+def fetch_trending_hackernews_posts():
     """Fetches top stories from Hacker News (Open API, no auth required)."""
     url = "https://hacker-news.firebaseio.com/v0/topstories.json"
     

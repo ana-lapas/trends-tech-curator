@@ -13,22 +13,27 @@ The technology ecosystem suffers from severe information overload. For tech comm
 * **Reduces Cognitive Load:** Transforms hours of manual YouTube/forum research into an automated, actionable weekly email.
 * **Noise Reduction (Data Quality):** Filters out generic tech news and clickbait by applying strict *Data Quality Gates* and *Shift-Left Filtering*.
 * **Empowers Communities:** Delivers highly targeted, ready-to-use content triggers to community leadership, ensuring discussions remain deeply technical and relevant.
+## 📌 Overview
+**Tech Trends Curator** is a robust, **stateful Data Engineering pipeline** that automates content curation. It identifies technical trends by calculating **Thermal Velocity (Momentum)** and provides **comparative growth insights** by leveraging historical data stored in a local SQLite database. It moves beyond raw view counts to highlight technologies that are *accelerating* in the developer community.
 
 ## 🏗️ Architecture & Fundamentals
-
-The system is built on solid data architecture principles:
+The system is built on solid data engineering principles:
 
 1. **Extraction (Shift-Left Filtering):**
-   * Uses the YouTube Data API v3 but enforces metadata barriers (`videoCategoryId: 28` - Science & Technology) at the request level, preventing gossip/news channels from entering the pipeline and saving API quota.
-   * Relies on a dynamic **Whitelist** of highly vetted global and local creators, ignoring the platform's standard (and biased) recommendation algorithm.
+   * Aggregates multi-source data from **YouTube** (via whitelist), **GitHub** (Trending Repos), and the **Hacker News API** (Top Stories).
+   * Enforces metadata barriers to prioritize high-signal technical content.
 
-2. **Transformation (Vectorized Math & NLP):**
-   * **Momentum Algorithm:** Uses `pandas` to calculate an engagement-per-hour score ($Score = \frac{Views}{Hours\_Alive} \times 1.5 + \frac{Likes}{Hours\_Alive} \times 2.0$), identifying what is gaining traction *right now*.
-   * **Entity Extraction:** Uses regex and a custom bilingual stopword dictionary (English/Portuguese) to filter out common verbs and jargon, isolating the actual technologies (e.g., *Claude, Python, Kubernetes*).
+2. **Stateful Transformation (Persistence & Math):**
+   * **Persistence Layer:** Uses `SQLite` to maintain a local knowledge base (`curator_data.db`) of processed items. This enables **stateful deduplication**, ensuring unique items are reported only once within a 7-day window.
+   * **Momentum & Velocity:** Calculates engagement velocity ($Momentum$) and compares current metrics against historical averages to generate growth insights (e.g., *🚀 Rising Fast*).
 
-3. **Load / Notification (Stateless SMTP):**
-   * Packages the processed insights into a MIME/SMTP payload.
-   * Securely dispatches the report to a distribution list via environment variables.
+3. **NLP & Insight Generation:**
+   * Uses regex-based entity extraction and a bilingual stopword dictionary to isolate relevant tech stacks from generic content titles.
+
+## 🛤️ Future Roadmap
+* **Advanced Analytics:** Integrate a dashboard (e.g., Streamlit) to visualize long-term trends from the SQLite database.
+* **AI Summarization:** Leverage an LLM API to generate human-readable technical summaries for each trending repo/video.
+* **Cloud Native:** Deploy via containerization (Docker) on serverless infrastructure.
 
 ## ⚙️ Infrastructure & How to Run
 
@@ -65,12 +70,6 @@ This application is designed to be easily containerized and deployed in any clou
 5. Run the orchestrator:  
    ```bash
     python -m src.main
-## 🛤️ Future Roadmap
-
-* **Dockerization:** Wrap the application in a `Dockerfile` and `docker-compose.yml` for isolated execution.
-* **CI/CD Automation:** Implement GitHub Actions to trigger the pipeline automatically every Monday morning via cron jobs.
-* **Stateful Architecture:** Integrate a PostgreSQL database to track time-series data and prove the longevity of a trend.
-
 ---
 
 ## 👩‍💻 About the Author
